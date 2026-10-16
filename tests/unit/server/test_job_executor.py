@@ -26,6 +26,7 @@ from repowise.server.job_executor import (
     _incremental_page_regen,
     _plan_incremental_page_regen,
     _repo_exclude_patterns,
+    _repo_risk_exclude_patterns,
     execute_job,
 )
 
@@ -114,6 +115,29 @@ async def test_execute_job_no_excludes_passes_none(session_factory, tmp_path):
     assert run_pipeline_mock.await_args.kwargs["exclude_patterns"] is None
 
 
+@pytest.mark.asyncio
+async def test_execute_job_passes_risk_exclude_patterns_from_settings(session_factory, tmp_path):
+    job_id = await _seed_repo_and_job(
+        session_factory,
+        tmp_path,
+        settings={"risk_exclude_patterns": ["docs/plans/**"]},
+    )
+
+    app_state = SimpleNamespace(session_factory=session_factory, fts=None, vector_store=None)
+    run_pipeline_mock = AsyncMock(return_value=_fake_result())
+    with (
+        patch("repowise.server.job_executor.run_pipeline", run_pipeline_mock),
+        patch("repowise.server.job_executor.persist_pipeline_result", AsyncMock()),
+        patch(
+            "repowise.server.provider_config.get_chat_provider_instance",
+            side_effect=RuntimeError("no provider"),
+        ),
+    ):
+        await execute_job(job_id, app_state)
+
+    assert run_pipeline_mock.await_args.kwargs["risk_exclude_patterns"] == ["docs/plans/**"]
+
+
 def test_repo_exclude_patterns_merges_settings_and_config(tmp_path):
     """DB settings + .repowise/config.yaml merge, order-preserved & de-duped."""
     import json
@@ -137,6 +161,25 @@ def test_repo_exclude_patterns_ignores_malformed_sources(tmp_path):
     """Malformed settings_json / missing config are ignored, not fatal."""
     repo = SimpleNamespace(settings_json="{not valid json")
     assert _repo_exclude_patterns(repo, str(tmp_path)) == []
+
+
+def test_repo_risk_exclude_patterns_merges_settings_and_config(tmp_path):
+    import json
+
+    config_dir = tmp_path / ".repowise"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        "risk_exclude_patterns:\n  - docs/plans/**\n  - docs/specs/**\n", encoding="utf-8"
+    )
+    repo = SimpleNamespace(
+        settings_json=json.dumps({"risk_exclude_patterns": ["docs/plans/**", "vendor/**"]})
+    )
+
+    assert _repo_risk_exclude_patterns(repo, str(tmp_path)) == [
+        "docs/plans/**",
+        "vendor/**",
+        "docs/specs/**",
+    ]
 
 
 @pytest.mark.asyncio

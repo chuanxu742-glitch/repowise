@@ -63,6 +63,40 @@ async def test_index_repo_collects_commit_rows(tmp_path) -> None:
     assert fix["files_changed"] == 2
 
 
+@pytest.mark.asyncio
+async def test_risk_exclusions_apply_to_full_and_incremental_commit_rows(tmp_path) -> None:
+    import git as gitpython
+
+    repo = gitpython.Repo.init(tmp_path)
+    docs_path = tmp_path / "docs" / "plans" / "plan.md"
+    code_path = tmp_path / "src" / "feature.py"
+    docs_path.parent.mkdir(parents=True)
+    code_path.parent.mkdir(parents=True)
+    docs_path.write_text("docs line\n" * 100, encoding="utf-8")
+    code_path.write_text("value = 1\n", encoding="utf-8")
+    repo.index.add(["docs/plans/plan.md", "src/feature.py"])
+    commit = repo.index.commit("docs and code")
+
+    indexer = GitIndexer(
+        tmp_path,
+        tier=GitIndexTier.FULL,
+        risk_exclude_patterns=["docs/plans/**"],
+    )
+    summary, _results = await indexer.index_repo("repo1")
+
+    full_row = next(row for row in summary.commit_rows if row["sha"] == commit.hexsha)
+    detail_paths = {
+        row["file_path"] for row in summary.commit_file_rows if row["sha"] == commit.hexsha
+    }
+    incremental_row = next(
+        row for row in indexer.capture_new_commit_rows() if row["sha"] == commit.hexsha
+    )
+
+    assert (full_row["lines_added"], full_row["files_changed"]) == (1, 1)
+    assert (incremental_row["lines_added"], incremental_row["files_changed"]) == (1, 1)
+    assert detail_paths == {"docs/plans/plan.md", "src/feature.py"}
+
+
 def test_list_reachable_shas_excludes_abandoned_branch_commits(tmp_path) -> None:
     """Rows for a squash-merged branch have to be prunable.
 

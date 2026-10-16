@@ -238,6 +238,36 @@ def test_build_commit_rows_features_and_ordering() -> None:
     assert newer["is_fix"] is False
 
 
+def test_build_commit_rows_risk_excludes_leave_commit_details_intact() -> None:
+    parsed = [
+        {
+            "sha": "docs-and-code",
+            "author_name": "Ann",
+            "author_email": "ann@x",
+            "ts": 2000,
+            "subject": "docs: update plan and code",
+            "changes": [
+                ("docs/plans/plan.md", 3000, 1),
+                ("docs/specs/change.md", 200, 0),
+                ("src/feature.py", 4, 2),
+            ],
+        }
+    ]
+
+    row = build_commit_rows(
+        parsed,
+        risk_exclude_patterns=("docs/plans/**", "docs/specs/**"),
+    )[0]
+    detail_rows = build_commit_file_rows(parsed)
+
+    assert (row["lines_added"], row["lines_deleted"], row["files_changed"]) == (4, 2, 1)
+    assert {detail["file_path"] for detail in detail_rows} == {
+        "docs/plans/plan.md",
+        "docs/specs/change.md",
+        "src/feature.py",
+    }
+
+
 def test_build_commit_rows_author_experience_is_cumulative() -> None:
     """Experience = the author's prior-commit count, oldest→newest."""
     parsed = [

@@ -65,6 +65,7 @@ async def _run_git_indexing(
     follow_renames: bool,
     tier: GitIndexTier = GitIndexTier.FULL,
     exclude_patterns: list[str] | None = None,
+    risk_exclude_patterns: list[str] | None = None,
     progress: ProgressCallback | None,
 ) -> tuple[Any | None, list[dict], dict[str, dict]]:
     """Run git history indexing.
@@ -80,6 +81,7 @@ async def _run_git_indexing(
             follow_renames=follow_renames,
             tier=tier,
             exclude_patterns=exclude_patterns,
+            risk_exclude_patterns=risk_exclude_patterns,
             # The indexing pass proper, and the one that knows the repo's
             # excludes, so this is where a git episode may be recorded.
             record_episodes=True,

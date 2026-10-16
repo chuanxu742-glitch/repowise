@@ -32,6 +32,12 @@ From an agent: `get_change_risk()` scores the working tree or HEAD,
 both revisions and keeps diff shape as supporting context. In the dashboard, the Commits
 page leads its table with review priority.
 
+The Commits page uses stored per-commit diff metrics. To keep documentation plans out of
+that ranking without removing them from the index, set `risk_exclude_patterns` in
+`.repowise/config.yaml` (for example `docs/plans/**`). The patterns affect only those
+stored metrics; file details and docs, chat, and search still include the paths. The next
+`repowise update` rebuilds Git history and recalculates existing scores.
+
 ### What gets scored
 
 With no revspec the subject is your uncommitted work (staged, unstaged and untracked)

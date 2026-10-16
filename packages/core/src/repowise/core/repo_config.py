@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ MANIFEST_BASENAME = "decisions.yaml"
 # are never silently folded into an unrelated health-only refresh.
 CONFIG_DEPENDENCY_KEYS: dict[str, frozenset[str]] = {
     "traversal": frozenset({"exclude_patterns"}),
-    "git_history": frozenset({"commit_limit", "follow_renames"}),
+    "git_history": frozenset({"commit_limit", "follow_renames", "risk_exclude_patterns"}),
     "health": frozenset({"assertions", "coverage", "refactoring"}),
     "generation": frozenset(
         {
@@ -112,6 +113,14 @@ def load_repo_config(repo_path: Path | str) -> dict[str, Any]:
         # user's provider/model/coverage settings would silently vanish and
         # every run would use defaults. Name the file and the parse error.
         raise RepoConfigError(f"Could not parse {config_path}: {exc}") from exc
+
+
+def configured_risk_excludes(config: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return valid repo-local paths excluded from stored commit-risk scoring."""
+    raw = config.get("risk_exclude_patterns")
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    return tuple(pattern for pattern in raw if isinstance(pattern, str) and pattern)
 
 
 def save_repo_config(repo_path: Path | str, config: dict[str, Any]) -> None:

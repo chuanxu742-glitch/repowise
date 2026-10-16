@@ -7,6 +7,8 @@ import yaml
 from repowise.core.repo_config import (
     changed_config_dependencies,
     config_dependency_fingerprints,
+    configured_risk_excludes,
+    load_repo_config,
 )
 
 
@@ -32,6 +34,7 @@ def test_dependency_fingerprints_classify_config_keys(tmp_path: Path) -> None:
     cases = [
         ("git_history", {"commit_limit": 5}),
         ("git_history", {"follow_renames": True}),
+        ("git_history", {"risk_exclude_patterns": ["docs/plans/**"]}),
         ("traversal", {"exclude_patterns": ["generated/**"]}),
         ("generation", {"provider": "openai"}),
         ("generation", {"enable_onboarding": False}),
@@ -51,6 +54,18 @@ def test_dependency_fingerprints_classify_config_keys(tmp_path: Path) -> None:
         _write_config(tmp_path, **values)
         current = config_dependency_fingerprints(tmp_path)
         assert changed_config_dependencies(baseline, current) == {expected}
+
+
+def test_configured_risk_excludes_reads_only_nonempty_string_patterns(tmp_path: Path) -> None:
+    _write_config(
+        tmp_path,
+        risk_exclude_patterns=["docs/plans/**", "", 3, "*.md"],
+    )
+
+    assert configured_risk_excludes(load_repo_config(tmp_path)) == (
+        "docs/plans/**",
+        "*.md",
+    )
 
 
 def test_health_rules_only_invalidate_health(tmp_path: Path) -> None:

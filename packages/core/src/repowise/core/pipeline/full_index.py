@@ -20,6 +20,7 @@ async def index_repo_full(
     *,
     commit_depth: int = _DEFAULT_COMMIT_LIMIT,
     exclude_patterns: list[str] | None = None,
+    risk_exclude_patterns: list[str] | None = None,
     include_submodules: bool = False,
     include_nested_repos: bool = False,
     follow_renames: bool = False,
@@ -43,11 +44,21 @@ async def index_repo_full(
     from repowise.core.persistence.database import resolve_db_url
     from repowise.core.pipeline import run_pipeline
     from repowise.core.pipeline.persist import persist_pipeline_result
+    from repowise.core.repo_config import configured_risk_excludes, load_repo_config
+
+    if risk_exclude_patterns is None:
+        try:
+            risk_exclude_patterns = list(configured_risk_excludes(load_repo_config(repo_path)))
+        except Exception:
+            # This entry point historically did not read config.yaml itself;
+            # a malformed file should not make an index-only run newly fail.
+            risk_exclude_patterns = []
 
     result = await run_pipeline(
         repo_path,
         commit_depth=commit_depth,
         exclude_patterns=exclude_patterns or None,
+        risk_exclude_patterns=risk_exclude_patterns,
         include_submodules=include_submodules,
         include_nested_repos=include_nested_repos,
         follow_renames=follow_renames,

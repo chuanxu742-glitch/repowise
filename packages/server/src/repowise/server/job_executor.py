@@ -100,6 +100,34 @@ def _repo_exclude_patterns(repo: Any, repo_path: str) -> list[str]:
     return patterns
 
 
+def _repo_risk_exclude_patterns(repo: Any, repo_path: str) -> list[str]:
+    """Collect stored commit-risk exclusions from DB settings and repo config."""
+    patterns: list[str] = []
+
+    def _add(values: Any) -> None:
+        if not isinstance(values, list):
+            return
+        for value in values:
+            if isinstance(value, str) and value and value not in patterns:
+                patterns.append(value)
+
+    try:
+        settings = json.loads(getattr(repo, "settings_json", "") or "{}")
+        if isinstance(settings, dict):
+            _add(settings.get("risk_exclude_patterns"))
+    except (TypeError, ValueError):
+        logger.debug("repo_settings_json_unparsable", repo_path=repo_path)
+
+    try:
+        from repowise.core.repo_config import configured_risk_excludes, load_repo_config
+
+        _add(list(configured_risk_excludes(load_repo_config(Path(repo_path)))))
+    except Exception:
+        logger.debug("repo_config_yaml_unreadable", repo_path=repo_path)
+
+    return patterns
+
+
 def _repo_wiki_style(repo: Any, repo_path: str) -> str:
     """Resolve a server job's effective wiki style from both config sources.
 
@@ -296,6 +324,7 @@ class _JobSpec:
     config: dict
     mode: str
     exclude_patterns: list[str]
+    risk_exclude_patterns: list[str]
     wiki_style: str
 
     @property
@@ -476,6 +505,7 @@ async def _start_job(session_factory: Any, job_id: str) -> _JobSpec | None:
             mode=mode,
             # Both resolved while ``repo`` is still session-attached.
             exclude_patterns=_repo_exclude_patterns(repo, repo_path),
+            risk_exclude_patterns=_repo_risk_exclude_patterns(repo, repo_path),
             wiki_style=_repo_wiki_style(repo, repo_path),
         )
         if mode not in VALID_JOB_MODES:
@@ -603,6 +633,7 @@ async def _run_index_pipeline(run: _JobRun, docs: _DocsPlan) -> Any:
         vector_store=run.vector_store,
         progress=run.progress,
         exclude_patterns=spec.exclude_patterns or None,
+        risk_exclude_patterns=spec.risk_exclude_patterns or None,
         wiki_style=spec.wiki_style,
         mode=docs.pipeline_mode,
     )
